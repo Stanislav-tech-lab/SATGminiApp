@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Магазин</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: var(--tg-theme-bg-color, #ffffff);
+            color: var(--tg-theme-text-color, #000000);
+            padding: 16px;
+        }
+        .product {
+            background: var(--tg-theme-secondary-bg-color, #f5f5f5);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .product-info h3 {
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+        .product-info p {
+            color: var(--tg-theme-hint-color, #666);
+            font-size: 14px;
+        }
+        .price {
+            font-weight: bold;
+            font-size: 18px;
+            color: var(--tg-theme-button-color, #2481cc);
+        }
+        button {
+            background: var(--tg-theme-button-color, #2481cc);
+            color: var(--tg-theme-button-text-color, #ffffff);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .cart-badge {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: var(--tg-theme-button-color, #2481cc);
+            color: white;
+            width: 56px;
+            height: 56px;
+            border-radius: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🛍️ Наш магазин</h1>
+    <div id="products"></div>
+    <div class="cart-badge" onclick="viewCart()">
+        🛒 <span id="cartCount">0</span>
+    </div>
+
+    <script>
+        // Инициализация Telegram Web App
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand(); // Раскрываем на весь экран
+        
+        // Показываем главную кнопку (внизу экрана)
+        tg.MainButton.setText("Оформить заказ");
+        tg.MainButton.hide();
+        
+        // Данные (можно получать от бота через initData)
+        let products = [
+            { id: 1, name: "Пицца Маргарита", price: 500, stock: 10 },
+            { id: 2, name: "Роллы Филадельфия", price: 450, stock: 5 },
+            { id: 3, name: "Бургер Двойной", price: 350, stock: 8 }
+        ];
+        
+        let cart = [];
+        
+        // Отображение товаров
+        function renderProducts() {
+            const container = document.getElementById('products');
+            container.innerHTML = '';
+            
+            products.forEach(product => {
+                const inCart = cart.find(i => i.id === product.id);
+                const quantity = inCart ? inCart.quantity : 0;
+                
+                const div = document.createElement('div');
+                div.className = 'product';
+                div.innerHTML = `
+                    <div class="product-info">
+                        <h3>${product.name}</h3>
+                        <p>В наличии: ${product.stock} шт.</p>
+                    </div>
+                    <div>
+                        <span class="price">${product.price}₽</span>
+                        ${quantity > 0 ? `
+                            <button onclick="updateQuantity(${product.id}, ${quantity - 1})">-</button>
+                            <span style="margin: 0 8px;">${quantity}</span>
+                            <button onclick="updateQuantity(${product.id}, ${quantity + 1})">+</button>
+                        ` : `
+                            <button onclick="addToCart(${product.id})">В корзину</button>
+                        `}
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            
+            updateCartBadge();
+        }
+        
+        // Добавление в корзину
+        function addToCart(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+            
+            const existing = cart.find(i => i.id === productId);
+            if (existing) {
+                existing.quantity++;
+            } else {
+                cart.push({ id: productId, name: product.name, price: product.price, quantity: 1 });
+            }
+            
+            renderProducts();
+            updateMainButton();
+        }
+        
+        // Изменение количества
+        function updateQuantity(productId, newQuantity) {
+            if (newQuantity <= 0) {
+                cart = cart.filter(i => i.id !== productId);
+            } else {
+                const item = cart.find(i => i.id === productId);
+                if (item) item.quantity = newQuantity;
+            }
+            
+            renderProducts();
+            updateMainButton();
+        }
+        
+        // Обновление бейджа корзины
+        function updateCartBadge() {
+            const total = cart.reduce((sum, item) => sum + item.quantity, 0);
+            document.getElementById('cartCount').textContent = total;
+        }
+        
+        // Показать/скрыть главную кнопку
+        function updateMainButton() {
+            if (cart.length > 0) {
+                const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                tg.MainButton.setText(`Оформить заказ (${total}₽)`);
+                tg.MainButton.show();
+            } else {
+                tg.MainButton.hide();
+            }
+        }
+        
+        // Просмотр корзины
+        function viewCart() {
+            if (cart.length === 0) {
+                tg.showAlert("Корзина пуста");
+                return;
+            }
+            
+            let message = "🛒 Ваш заказ:\n\n";
+            cart.forEach(item => {
+                message += `${item.name} x${item.quantity} = ${item.price * item.quantity}₽\n`;
+            });
+            const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            message += `\nИтого: ${total}₽`;
+            
+            tg.showPopup({
+                title: "Корзина",
+                message: message,
+                buttons: [
+                    { id: "checkout", type: "default", text: "Оформить" },
+                    { id: "cancel", type: "cancel", text: "Отмена" }
+                ]
+            }, (buttonId) => {
+                if (buttonId === "checkout") {
+                    checkout();
+                }
+            });
+        }
+        
+        // Оформление заказа
+        function checkout() {
+            tg.showPopup({
+                title: "Адрес доставки",
+                message: "Введите адрес для доставки:",
+                buttons: [
+                    { id: "ok", type: "default", text: "ОК" }
+                ]
+            }, () => {
+                // В реальном приложении нужно запросить адрес через input
+                // Упрощённо: отправляем данные в бота
+                const orderData = {
+                    action: "create_order",
+                    items: cart,
+                    address: "Тестовый адрес"
+                };
+                
+                // Отправляем данные в бота
+                tg.sendData(JSON.stringify(orderData));
+                tg.close();
+            });
+        }
+        
+        // Обработчик нажатия главной кнопки
+        tg.MainButton.onClick(() => {
+            viewCart();
+        });
+        
+        // Запуск
+        renderProducts();
+        
+        // Отправляем в Telegram, что приложение загружено
+        tg.ready();
+    </script>
+</body>
+</html>
